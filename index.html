@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carnet Moto">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d1012">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Carnet Moto</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-column phone app. Blueprint-style vehicle header with odometer and one primary action, then a two-column grid of section tiles. Dark only, steel-blue line work. */
+:root{
+  --bg:#0d1012; --surface:#14191c; --surface2:#1b2125; --line:#273036;
+  --fg:#e3e7e9; --muted:#8a959c; --accent:#1f4f9c; --accent-ink:#ffffff; --hi:#6c9be8;
+  --grid:rgba(108,155,232,.08);
+  --ok:#78b890; --warn:#dba84c; --crit:#e2705d;
+  --f-display:'Barlow Condensed','Arial Narrow',system-ui,sans-serif;
+  --f-body:'Inter',system-ui,-apple-system,sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{color:var(--fg);font:15px/1.45 var(--f-body);padding-block:0 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+#app{max-width:520px;margin:0 auto}
+h1,h2,h3,p{margin:0}
+a{color:inherit}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--hi);outline-offset:2px}
+
+/* top bar (sub pages) */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:11;background:var(--bg);display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);margin-bottom:16px}
+.back{width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--line);border-radius:6px;text-decoration:none;font-size:24px;line-height:1;flex:none;background:var(--surface)}
+.top h1{font:600 24px/1.1 var(--f-display);letter-spacing:.03em;text-transform:uppercase}
+.top p{margin-top:2px;color:var(--muted);font-size:13px}
+
+/* hero */
+.hero{padding-top:16px;display:grid;gap:14px}
+.vt{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.vt h1{font:600 26px/1.1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;text-align:center;flex:1;min-width:0;overflow-wrap:anywhere}
+.vt .count{font:400 12px var(--f-mono);color:var(--muted)}
+.icon{width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--line);border-radius:6px;background:var(--surface);flex:none;cursor:pointer}
+.icon svg,.arrow svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.stage{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:8px;align-items:center}
+.arrow{width:40px;height:56px;display:grid;place-items:center;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer}
+.arrow:disabled{opacity:.3;cursor:default}
+.viz{aspect-ratio:400/236;max-width:100%;border:1px solid var(--line);border-radius:8px;background-color:var(--surface);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:20px 20px;overflow:hidden}
+.viz svg,.viz img{display:block;width:100%;height:100%}
+.viz img{object-fit:cover}
+.bike *{fill:none;stroke:var(--hi);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.bike .fine{stroke-opacity:.4;stroke-width:1}
+.bike .solid{fill:var(--hi)}
+.bike .body{fill:var(--surface)}
+.bike .tire{stroke-width:6;stroke-opacity:.85}
+.bike .thick{stroke-width:4.5}
+.bike .dash{stroke-dasharray:4 4;stroke-opacity:.35;stroke-width:1}
+.odo{display:flex;align-items:center;justify-content:center;gap:4px;font:500 22px var(--f-mono)}
+.odo b{display:grid;place-items:center;width:26px;height:36px;background:var(--surface2);border:1px solid var(--line);border-radius:4px;font-weight:500}
+.odo i{font-style:normal;color:var(--muted);font-size:13px;margin-left:6px;letter-spacing:.08em}
+.meta-line{text-align:center;color:var(--muted);font-size:13px;margin-top:-6px}
+.cta{min-height:54px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:600 20px var(--f-display);letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+
+/* alerts */
+.alerts{display:grid;gap:6px;margin-top:16px}
+.alert{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);text-decoration:none;font-size:14px}
+.alert::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.alert.warn::before{background:var(--warn)}
+.alert.crit::before{background:var(--crit)}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:16px}
+.tile{display:flex;flex-direction:column;gap:4px;min-height:116px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);text-decoration:none;position:relative}
+.tile.wide{grid-column:1/-1;min-height:0}
+.tile .lb{font:600 13px var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding-right:26px}
+.tile svg{position:absolute;top:11px;right:11px;width:18px;height:18px;fill:none;stroke:var(--muted);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tile .vl{font:600 28px/1.1 var(--f-display);letter-spacing:.01em;margin-top:auto}
+.tile .vl small{font-size:15px;color:var(--muted);font-weight:500}
+.tile .sb{color:var(--muted);font-size:13px;line-height:1.3}
+.bar{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;margin-top:6px}
+.bar span{display:block;height:100%;background:var(--hi)}
+
+/* generic blocks */
+.sec{font:600 13px var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:26px 0 8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.card{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:12px;display:grid;gap:6px}
+.stack{display:grid;gap:8px}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.row>*{min-width:0}
+.card h3{font:600 17px/1.2 var(--f-display);letter-spacing:.03em}
+.muted{color:var(--muted);font-size:13px}
+.hint{color:var(--muted);font-size:13px;line-height:1.4}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.empty{padding:16px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:14px;text-align:center}
+.pill{font:600 12px var(--f-display);letter-spacing:.1em;text-transform:uppercase;padding:2px 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted);white-space:nowrap;flex:none}
+.pill.ok{color:var(--ok);border-color:var(--ok)}
+.pill.soon{color:var(--warn);border-color:var(--warn)}
+.pill.overdue{color:var(--crit);border-color:var(--crit)}
+.pill.unknown{color:var(--fg)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.btn{min-height:44px;padding:0 16px;border:1px solid var(--line);border-radius:6px;background:var(--surface2);cursor:pointer;font-weight:500}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.ghost{background:transparent}
+.btn.small{min-height:36px;padding:0 12px;font-size:13px}
+.btn.danger.armed,.btn.armed{border-color:var(--crit);color:var(--crit)}
+.btn.block{width:100%}
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.kpi{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:12px}
+.kpi .lb{font:600 13px var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.kpi .vl{font:600 32px/1.1 var(--f-display);margin-top:4px}
+.cat{display:grid;grid-template-columns:90px minmax(0,1fr) auto;gap:10px;align-items:center;font-size:14px}
+.cat .bar{margin:0;height:6px}
+.list-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
+.list-item:last-child{border-bottom:0}
+.list-item .t{overflow-wrap:anywhere}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:transparent;font-size:13px;cursor:pointer}
+.chk{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;border-bottom:1px solid var(--line)}
+.chk:last-of-type{border-bottom:0}
+.box{width:44px;height:44px;display:grid;place-items:center;background:none;border:0;cursor:pointer}
+.box span{width:22px;height:22px;border:1.5px solid var(--muted);border-radius:5px;display:grid;place-items:center}
+.box.on span{background:var(--accent);border-color:var(--accent)}
+.box.on span::after{content:"";width:6px;height:11px;border:solid var(--accent-ink);border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.chk .tx{background:none;border:0;text-align:left;padding:10px 0;cursor:pointer;overflow-wrap:anywhere}
+.chk.done .tx{color:var(--muted);text-decoration:line-through}
+.addrow{display:flex;gap:8px;margin-top:8px}
+.addrow input{flex:1;min-width:0}
+.link{display:flex;justify-content:space-between;gap:10px;padding:12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);text-decoration:none}
+.link span{color:var(--muted)}
+.q{font-size:17px;line-height:1.45}
+.opts{display:grid;gap:8px;margin-top:6px}
+.opts .btn{text-align:left;padding:10px 14px;line-height:1.35}
+.cause{padding-left:18px;margin:0;display:grid;gap:4px}
+
+/* forms */
+.fld{display:grid;gap:6px;margin-bottom:12px}
+.fld>span{font-size:13px;color:var(--muted)}
+input,select,textarea{width:100%;min-height:44px;padding:10px 12px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;font:16px var(--f-body)}
+textarea{min-height:90px;resize:vertical}
+input[type=checkbox]{width:22px;min-height:22px;height:22px}
+input[type=file]{padding:9px 10px}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.toggle{display:flex;gap:10px;align-items:center;font-size:14px;min-height:44px}
+.photo-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.sw{width:36px;height:36px;border-radius:50%;border:2px solid var(--line);cursor:pointer}
+input[type=color]{padding:4px;min-height:44px}
+
+/* sheet */
+.sheet-wrap{position:fixed;inset:0;z-index:50}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.62)}
+.sheet{position:absolute;left:0;right:0;bottom:0;margin:0 auto;max-width:520px;max-height:90%;overflow:auto;background:var(--surface);border:1px solid var(--line);border-bottom:0;border-radius:14px 14px 0 0;padding:16px max(16px,env(safe-area-inset-left,0px)) calc(16px + env(safe-area-inset-bottom,0px));animation:up .18s ease-out}
+.sheet-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.sheet-h h2{font:600 20px var(--f-display);letter-spacing:.08em;text-transform:uppercase}
+.x{width:40px;height:40px;border:0;background:none;font-size:18px;cursor:pointer;color:var(--muted)}
+.sheet-f{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+@keyframes up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));z-index:60;max-width:calc(100% - 32px);padding:10px 16px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;font-size:14px;text-align:center}
+.foot{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:28px}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}}
+@media (max-width:360px){.cat{grid-template-columns:70px minmax(0,1fr) auto}.odo b{width:22px}}
+</style>
+<style>
+html,body{margin:0}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+img{max-width:100%}
+</style>
+</head>
+<body>
+
+
+<div id="app"></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- helpers ---------- */
+var KEY='carnet-moto-v1';
+var uid=function(){return Math.random().toString(36).slice(2,9)};
+var pad=function(n){return String(n).padStart(2,'0')};
+var iso=function(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+var today=function(){return iso(new Date())};
+var D=function(s){return new Date(s+'T12:00:00')};
+var addMonths=function(d,n){return new Date(d.getFullYear(),d.getMonth()+n,d.getDate(),12)};
+var fmtD=function(s){return s?D(s).toLocaleDateString('fr-FR'):'—'};
+var fmtM=function(d){return pad(d.getMonth()+1)+'/'+d.getFullYear()};
+var nf=function(n){return Math.round(+n||0).toLocaleString('fr-FR')};
+var eur=function(n){return nf(n)+' €'};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+var DAY=864e5;
+
+/* ---------- data ---------- */
+var T=function(name,km,mo,parts){return {id:uid(),name:name,km:km,mo:mo,parts:parts||[]}};
+function defaultTasks(type){return type==='auto'?tasksAuto():tasksMoto()}
+function tasksAuto(){return [
+  T('Vidange huile moteur',3000,12,['Huile moteur','Joint de bouchon de vidange']),
+  T('Jeu aux culbuteurs',10000,12,['Joint de cache-culbuteurs']),
+  T('Allumage : bougies et rupteur',5000,12,['Bougies (x2)','Rupteur et condensateur']),
+  T('Filtre à air',5000,12,['Filtre à air']),
+  T('Carburateur : nettoyage et réglage',0,12,['Kit réparation carburateur']),
+  T('Graissage des points de graissage',3000,12,['Graisse']),
+  T('Freins : usure et liquide',6000,24,['Garnitures de frein','Liquide de frein (type selon manuel)']),
+  T('Pneus : état et pression',5000,12,['Pneus']),
+  T('Courroie de dynamo ou alternateur',10000,24,['Courroie de dynamo ou alternateur']),
+  T('Suspension : amortisseurs et batteurs',20000,36,['Amortisseurs','Batteurs']),
+  T('Éclairage et essuie-glaces',0,12,[]),
+  T('Câbles et commandes : graissage et réglage',10000,24,[])
+]}
+function tasksMoto(){return [
+  T('Vidange huile moteur et nettoyage du filtre',3000,12,['Huile moteur 10W-40','Joint de vis de vidange']),
+  T('Filtre à air (mousse)',1500,6,['Filtre à air mousse']),
+  T('Bougie',6000,24,['Bougie']),
+  T('Jeu aux soupapes',6000,0,['Joints de cache-culbuteurs']),
+  T('Carburateur : nettoyage et réglage du ralenti',0,12,['Kit réparation carburateur']),
+  T('Chaîne : graissage et tension',500,3,['Graisse chaîne']),
+  T('Kit chaîne : usure et remplacement',15000,0,['Kit chaîne (chaîne, pignon, couronne)']),
+  T('Freins : usure et liquide',6000,24,['Plaquettes ou mâchoires de frein','Liquide de frein']),
+  T('Pneus et rayons : état et pression',3000,12,['Pneu avant','Pneu arrière']),
+  T('Fourche : huile et joints spi',20000,36,['Huile de fourche','Joints spi de fourche']),
+  T('Roulements de direction et de roues',12000,24,['Roulements de direction']),
+  T('Câbles et leviers : graissage et réglage',3000,12,[])
+]}
+var I=function(t){return {id:uid(),t:t,done:false,due:''}};
+function defaultLists(type){return type==='auto'?listsAuto():listsMoto()}
+function listsAuto(){return [
+  {id:uid(),name:'Remise en route',items:['Vérifier la carte grise','Assurer la voiture','Faire le diagnostic de démarrage','Vidanger le moteur et changer le filtre à air','Contrôler freins, pneus et éclairage','Passer le contrôle technique','Premier essai sur route'].map(I)},
+  {id:uid(),name:'Équipement de bord',items:['Triangle de signalisation','Gilet jaune','Extincteur','Roue de secours et cric','Trousse à outils'].map(I)},
+  {id:uid(),name:'Avant chaque sortie',items:['Niveau d’huile','Pression des pneus','Freins','Essence','Éclairage'].map(I)}
+]}
+function listsMoto(){return [
+  {id:uid(),name:'Remise en route',items:['Récupérer la FIV','Refaire la carte grise','Assurer la moto','Faire le diagnostic de démarrage','Vidanger le moteur et changer le filtre à air','Contrôler freins, pneus et chaîne','Passer le contrôle technique','Premier essai sur route'].map(I)},
+  {id:uid(),name:'Équipement',items:['Casque homologué','Gants','Blouson','Pantalon ou protections','Bottes','Antivol'].map(I)},
+  {id:uid(),name:'Avant chaque sortie',items:['Niveau d’huile','Pression des pneus','Tension et graissage de la chaîne','Freins','Essence et robinet'].map(I)}
+]}
+var BLUE='#1f4f9c',GREEN='#4c8c4a';
+function newVehicle(o){o=o||{};var ty=o.type||'moto';return Object.assign({id:uid(),type:ty,color:ty==='auto'?GREEN:BLUE,name:'',year:'',km:0,since:'',photo:'',plate:'',vin:'',cg:'ok',insurer:'',contract:'',insEnd:'',ctLast:'',ctNext:'',sorties:[],expenses:[],tasks:defaultTasks(ty),history:[],parts:[],lists:defaultLists(ty),notes:[],links:[],docs:[],inclBuy:false},o)}
+function seed(){var a=newVehicle({name:'Honda XL600R',year:1987,km:100000,cg:'fiv'}),b=newVehicle({name:'Citroën 2CV',type:'auto'});return {cur:a.id,v2:1,vehicles:[a,b]}}
+var S;
+try{var raw=localStorage.getItem(KEY);S=raw?JSON.parse(raw):null}catch(e){S=null}
+if(!S||!S.vehicles||!S.vehicles.length)S=seed();
+S.vehicles.forEach(function(v){if(!v.type)v.type='moto';if(!v.color)v.color=v.type==='auto'?GREEN:BLUE});
+if(!S.v2){S.v2=1;if(!S.vehicles.some(function(v){return /2cv/i.test(v.name)}))S.vehicles.push(newVehicle({name:'Citroën 2CV',type:'auto'}))}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Enregistrement impossible sur cet appareil')}}
+var cur=function(){return S.vehicles.find(function(v){return v.id===S.cur})||S.vehicles[0]};
+
+/* ---------- per-vehicle colour ---------- */
+function hexRgb(h){var n=parseInt(h.slice(1),16);return [n>>16&255,n>>8&255,n&255]}
+function lum(c){var a=c.map(function(x){x/=255;return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4)});return .2126*a[0]+.7152*a[1]+.0722*a[2]}
+function lighten(h){
+  var c=hexRgb(h).map(function(x){return x/255}),mx=Math.max.apply(null,c),mn=Math.min.apply(null,c),l=(mx+mn)/2,d=mx-mn,s=d===0?0:d/(1-Math.abs(2*l-1)),hh=0;
+  if(d){if(mx===c[0])hh=((c[1]-c[2])/d)%6;else if(mx===c[1])hh=(c[2]-c[0])/d+2;else hh=(c[0]-c[1])/d+4;hh*=60;if(hh<0)hh+=360}
+  l=Math.max(l,.64);
+  var C=(1-Math.abs(2*l-1))*s,X=C*(1-Math.abs((hh/60)%2-1)),m=l-C/2,r,g,b;
+  if(hh<60){r=C;g=X;b=0}else if(hh<120){r=X;g=C;b=0}else if(hh<180){r=0;g=C;b=X}else if(hh<240){r=0;g=X;b=C}else if(hh<300){r=X;g=0;b=C}else{r=C;g=0;b=X}
+  return [r+m,g+m,b+m].map(function(x){return Math.round(x*255)});
+}
+function applyTheme(v){
+  var col=/^#[0-9a-f]{6}$/i.test(v.color||'')?v.color:BLUE,rgb=hexRgb(col),hi=lighten(col),st=document.documentElement.style;
+  st.setProperty('--accent',col);
+  st.setProperty('--accent-ink',lum(rgb)>.4?'#0b1114':'#ffffff');
+  st.setProperty('--hi','rgb('+hi.join(',')+')');
+  st.setProperty('--grid','rgba('+hi.join(',')+',.08)');
+}
+
+/* ---------- indexedDB for imported documents ---------- */
+function idb(){return new Promise(function(res,rej){var r=indexedDB.open('carnet-moto-docs',1);r.onupgradeneeded=function(){r.result.createObjectStore('f')};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}})}
+function idbRun(mode,fn){return idb().then(function(db){return new Promise(function(res,rej){var t=db.transaction('f',mode);var q=fn(t.objectStore('f'));t.oncomplete=function(){res(q&&q.result)};t.onerror=function(){rej(t.error)}})})}
+var idbPut=function(k,b){return idbRun('readwrite',function(s){return s.put(b,k)})};
+var idbGet=function(k){return idbRun('readonly',function(s){return s.get(k)})};
+var idbDel=function(k){return idbRun('readwrite',function(s){return s.delete(k)})};
+
+/* ---------- computations ---------- */
+function avgKm(v){
+  var s=v.sorties.slice().sort(function(a,b){return a.date.localeCompare(b.date)});
+  if(s.length<2)return null;
+  var days=(D(s[s.length-1].date)-D(s[0].date))/DAY;
+  if(days<14)return null;
+  var per=(s[s.length-1].km-s[0].km)/(days/30.44);
+  return per>0?per:null;
+}
+function taskState(v,t){
+  var h=v.history.filter(function(x){return x.taskId===t.id}).sort(function(a,b){return b.date.localeCompare(a.date)||b.km-a.km})[0];
+  if(!h)return {st:'unknown',last:null,due:null,remKm:null};
+  var now=new Date(),avg=avgKm(v),due=null,remKm=null;
+  if(t.mo>0)due=addMonths(D(h.date),t.mo);
+  if(t.km>0){
+    remKm=h.km+t.km-v.km;
+    var e=null;
+    if(remKm<=0)e=now;else if(avg)e=new Date(now.getTime()+remKm/avg*30.44*DAY);
+    if(e&&(!due||e<due))due=e;
+  }
+  var st='ok';
+  if((remKm!==null&&remKm<=0)||(due&&due<=now))st='overdue';
+  else if((remKm!==null&&remKm<=500)||(due&&(due-now)<45*DAY))st='soon';
+  return {st:st,last:h,due:due,remKm:remKm};
+}
+var RANK={overdue:0,unknown:1,soon:2,ok:3};
+var ST_LABEL={overdue:'En retard',unknown:'Historique inconnu',soon:'Bientôt',ok:'À jour'};
+function fin(v){
+  var ex=v.expenses,total=0,buy=0,byCat={};
+  ex.forEach(function(e){var a=+e.amount||0;total+=a;if(e.cat==='Achat')buy+=a;byCat[e.cat]=(byCat[e.cat]||0)+a});
+  var start=v.since?D(v.since):(ex.length?D(ex.map(function(e){return e.date}).sort()[0]):new Date());
+  var months=Math.max(1,(new Date()-start)/(30.44*DAY));
+  var base=v.inclBuy?total:total-buy;
+  return {total:total,buy:buy,byCat:byCat,months:months,monthly:base/months};
+}
+var CG={fiv:'À récupérer (FIV)',progress:'Demande en cours',ok:'En règle'};
+function alertsFor(v){
+  var a=[],now=new Date();
+  var dl=function(s){return s?Math.ceil((D(s)-now)/DAY):null};
+  if(v.cg!=='ok')a.push({lv:'warn',t:'Carte grise : '+CG[v.cg].toLowerCase(),h:'admin'});
+  [['insEnd','Assurance'],['ctNext','Contrôle technique']].forEach(function(p){
+    var d=dl(v[p[0]]);
+    if(d===null)a.push({lv:'info',t:p[1]+' : date à renseigner',h:'admin'});
+    else if(d<0)a.push({lv:'crit',t:p[1]+' : échéance dépassée depuis '+(-d)+' j',h:'admin'});
+    else if(d<=30)a.push({lv:'warn',t:p[1]+' : échéance dans '+d+' j',h:'admin'});
+  });
+  v.lists.forEach(function(l){l.items.forEach(function(i){
+    if(!i.done&&i.due){var d=dl(i.due);if(d!==null&&d<=7)a.push({lv:d<0?'crit':'warn',t:i.t+(d<0?' : en retard':' : sous '+d+' j'),h:'checklist'})}
+  })});
+  var o={crit:0,warn:1,info:2};
+  return a.sort(function(x,y){return o[x.lv]-o[y.lv]});
+}
+
+/* ---------- ui helpers ---------- */
+var app=document.getElementById('app');
+var $=function(s){return document.querySelector(s)};
+var toastT;
+function toast(m){var t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true},2600)}
+function closeSheet(){var s=$('#sheet');if(s)s.remove()}
+function sheet(title,body,onok,okLabel){
+  closeSheet();
+  var el=document.createElement('div');el.className='sheet-wrap';el.id='sheet';
+  el.innerHTML='<div class="sheet-bg" data-act="close"></div><form class="sheet" autocomplete="off"><div class="sheet-h"><h2>'+esc(title)+'</h2><button type="button" class="x" data-act="close" aria-label="Fermer">✕</button></div>'+body+'<div class="sheet-f"><button type="button" class="btn ghost" data-act="close">Annuler</button><button class="btn primary" type="submit">'+(okLabel||'Enregistrer')+'</button></div></form>';
+  document.body.appendChild(el);
+  el.querySelector('form').addEventListener('submit',function(e){e.preventDefault();var r=onok(new FormData(e.target));if(r!==false)closeSheet()});
+}
+function fld(label,name,type,val,extra){return '<label class="fld"><span>'+label+'</span><input name="'+name+'" type="'+(type||'text')+'" value="'+esc(val==null?'':val)+'" '+(extra||'')+'></label>'}
+function sel(label,name,opts,val){return '<label class="fld"><span>'+label+'</span><select name="'+name+'">'+opts.map(function(o){var v=Array.isArray(o)?o[0]:o,l=Array.isArray(o)?o[1]:o;return '<option value="'+esc(v)+'"'+(v===val?' selected':'')+'>'+esc(l)+'</option>'}).join('')+'</select></label>'}
+function head(t,sub){return '<header class="top"><a class="back" href="#accueil" aria-label="Retour à l’accueil">‹</a><div><h1>'+t+'</h1>'+(sub?'<p>'+sub+'</p>':'')+'</div></header>'}
+function resizeImg(file,max){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){var im=new Image();im.onload=function(){var k=Math.min(1,max/im.width),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.82))};im.onerror=rej;im.src=r.result};r.onerror=rej;r.readAsDataURL(file)})}
+
+/* ---------- bike drawing ---------- */
+function wheel(cx,cy,r){
+  var s='<circle class="tire" cx="'+cx+'" cy="'+cy+'" r="'+(r-3)+'"/><circle cx="'+cx+'" cy="'+cy+'" r="'+(r-10)+'"/><circle class="fine" cx="'+cx+'" cy="'+cy+'" r="'+(r-15)+'"/>';
+  for(var i=0;i<18;i++){var a=i*Math.PI/9;s+='<line class="fine" x1="'+(cx+Math.cos(a)*7).toFixed(1)+'" y1="'+(cy+Math.sin(a)*7).toFixed(1)+'" x2="'+(cx+Math.cos(a)*(r-15)).toFixed(1)+'" y2="'+(cy+Math.sin(a)*(r-15)).toFixed(1)+'"/>'}
+  return s+'<circle cx="'+cx+'" cy="'+cy+'" r="7"/><circle class="solid" cx="'+cx+'" cy="'+cy+'" r="2.4"/>';
+}
+function bikeSVG(){
+  return '<svg class="bike" viewBox="0 0 400 236" role="img" aria-label="Dessin technique d’une moto enduro">'+
+  '<line class="dash" x1="20" y1="217" x2="380" y2="217"/><line class="dash" x1="86" y1="162" x2="318" y2="160"/>'+
+  wheel(86,162,52)+wheel(318,160,56)+
+  '<path class="fine" d="M170,148 L86,154 M170,166 L86,170"/><circle class="fine" cx="86" cy="162" r="16"/>'+
+  '<path class="thick" d="M170,152 L92,158"/><path d="M168,160 L92,164"/>'+
+  '<path class="thick" d="M148,92 L122,154"/><path d="M156,94 L130,156"/><path d="M118,88 L90,152"/>'+
+  '<path class="body" d="M176,122 L244,122 L248,154 Q246,168 232,168 L192,168 Q176,164 176,152 Z"/>'+
+  '<path class="body" d="M210,122 L244,122 L254,92 L224,86 Z"/><path d="M222,86 L254,92 L257,82 L226,76 Z" class="body"/>'+
+  '<path class="fine" d="M217,114 L247,114 M220,106 L250,106 M223,98 L252,98"/>'+
+  '<circle cx="190" cy="140" r="9"/><circle class="fine" cx="190" cy="140" r="4"/><circle cx="170" cy="154" r="4"/>'+
+  '<path class="thick" d="M252,100 C274,106 276,136 250,142 L170,132 L68,104"/><path class="body" d="M158,126 L62,100 L56,113 L154,139 Z"/>'+
+  '<path d="M178,160 L150,178 L145,173"/><path class="thick" d="M204,172 L232,172"/>'+
+  '<path class="body" d="M92,74 Q64,66 50,74 L62,88 Q80,86 92,88 Z"/>'+
+  '<path class="body" d="M182,68 L96,74 Q80,76 78,86 L92,92 L178,92 Z"/>'+
+  '<path class="body" d="M264,72 C246,54 206,54 182,67 L177,94 C204,102 244,98 266,90 Z"/>'+
+  '<path class="fine" d="M200,62 C222,56 244,58 258,68"/>'+
+  '<path class="thick" d="M272,62 L318,160"/><path d="M262,66 L308,160"/>'+
+  '<path d="M270,60 L252,50 L238,55"/><circle cx="238" cy="55" r="2.4" class="solid"/>'+
+  '<circle class="body" cx="292" cy="80" r="13"/><circle class="fine" cx="292" cy="80" r="7"/>'+
+  '<path class="thick" d="M296,106 Q324,90 354,114"/>'+
+  '</svg>';
+}
+
+function wheelCar(cx,cy,r){
+  var s='<circle class="tire" cx="'+cx+'" cy="'+cy+'" r="'+(r-3)+'"/><circle class="body" cx="'+cx+'" cy="'+cy+'" r="'+(r-9)+'"/><circle class="fine" cx="'+cx+'" cy="'+cy+'" r="'+(r-14)+'"/>';
+  for(var i=0;i<5;i++){var a=i*Math.PI*2/5-Math.PI/2;s+='<circle class="solid" cx="'+(cx+Math.cos(a)*9).toFixed(1)+'" cy="'+(cy+Math.sin(a)*9).toFixed(1)+'" r="1.6"/>'}
+  return s+'<circle cx="'+cx+'" cy="'+cy+'" r="4"/>';
+}
+function carSVG(){
+  return '<svg class="bike" viewBox="0 0 400 236" role="img" aria-label="Dessin technique d’une 2CV">'+
+  '<line class="dash" x1="20" y1="209" x2="380" y2="209"/>'+
+  '<path class="body" d="M42,166 L38,126 Q38,94 74,88 L236,70 Q252,68 258,80 L276,106 L336,114 Q352,116 354,130 L354,164 Z"/>'+
+  '<path class="fine" d="M62,94 Q150,78 236,72"/>'+
+  '<path d="M82,96 L234,80 L252,100 L246,128 L84,128 Z"/>'+
+  '<path class="fine" d="M168,86 L170,150 M250,100 L254,150 M84,128 L86,150"/>'+
+  '<path class="fine" d="M222,120 L238,120"/>'+
+  '<path d="M280,118 L342,126"/><path class="fine" d="M280,126 L342,134"/>'+
+  '<path class="body" d="M344,156 L360,156 L360,166 L344,166 Z"/><path class="body" d="M32,158 L50,158 L50,166 L32,166 Z"/>'+
+  '<circle class="body" cx="338" cy="136" r="12"/><circle class="fine" cx="338" cy="136" r="6"/>'+
+  '<path d="M264,166 Q264,146 300,146 Q336,146 336,166"/><path d="M60,166 Q60,146 95,146 Q130,146 130,166"/>'+
+  '<path class="fine" d="M130,160 L264,160"/>'+
+  wheelCar(95,180,28)+wheelCar(300,180,28)+
+  '</svg>';
+}
+function vehicleSVG(v){return v.type==='auto'?carSVG():bikeSVG()}
+
+/* ---------- icons ---------- */
+var IC={
+  wrench:'<svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+  box:'<svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
+  euro:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 9a4 4 0 0 0-6 2M8 12.5h6M8.5 14.5a4 4 0 0 0 7 1"/></svg>',
+  folder:'<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  check:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></svg>',
+  pulse:'<svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>',
+  book:'<svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/></svg>',
+  edit:'<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+  prev:'<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
+  next:'<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>'
+};
+
+/* ---------- pages ---------- */
+var PAGES={};
+function tile(href,label,icon,val,sub,cls){return '<a class="tile '+(cls||'')+'" href="#'+href+'">'+IC[icon]+'<span class="lb">'+label+'</span><span class="vl">'+val+'</span><span class="sb">'+sub+'</span></a>'}
+
+PAGES.accueil=function(){
+  var v=cur(),n=S.vehicles.length,idx=S.vehicles.indexOf(v);
+  var todo=v.parts.filter(function(p){return p.st==='todo'});
+  var est=todo.reduce(function(a,p){return a+(+p.price||0)*(+p.qty||1)},0);
+  var states=v.tasks.map(function(t){return taskState(v,t)});
+  var unk=states.filter(function(s){return s.st==='unknown'}).length;
+  var now=unk+states.filter(function(s){return s.st==='overdue'}).length;
+  var dues=states.filter(function(s){return s.due&&(s.st==='ok'||s.st==='soon')}).map(function(s){return s.due}).sort(function(a,b){return a-b});
+  var entV,entS;
+  if(now>0){entV='Maintenant';entS=now+' tâche'+(now>1?'s':'')+' à faire'+(unk?' (dont '+unk+' sans historique)':'')}
+  else if(dues.length){entV=fmtM(dues[0]);entS='Prochaine échéance estimée'}
+  else{entV='—';entS='Aucune échéance estimée'}
+  var f=fin(v);
+  var tot=0,dn=0;v.lists.forEach(function(l){l.items.forEach(function(i){tot++;if(i.done)dn++})});
+  var al=alertsFor(v).slice(0,3);
+  var ss=v.sorties.slice().sort(function(a,b){return a.date.localeCompare(b.date)||a.km-b.km});
+  var recent=ss.map(function(s,i){return {s:s,d:i?s.km-ss[i-1].km:null}}).reverse().slice(0,5);
+  var digits=String(Math.round(v.km)).padStart(6,'0').split('');
+  var h='<section class="hero"><div class="vt"><button class="icon" data-act="vehicle-edit" aria-label="Modifier le véhicule">'+IC.edit+'</button><h1>'+esc(v.name||'Véhicule')+'</h1>'+(n>1?'<span class="count">'+(idx+1)+'/'+n+'</span>':'<span class="count"></span>')+'</div>'+
+  '<div class="stage"><button class="arrow" data-act="prev" '+(n<2?'disabled':'')+' aria-label="Véhicule précédent">'+IC.prev+'</button><div class="viz">'+(v.photo?'<img src="'+esc(v.photo)+'" alt="'+esc(v.name)+'">':vehicleSVG(v))+'</div><button class="arrow" data-act="next" '+(n<2?'disabled':'')+' aria-label="Véhicule suivant">'+IC.next+'</button></div>'+
+  '<div class="odo" aria-label="'+nf(v.km)+' kilomètres">'+digits.map(function(d){return '<b>'+d+'</b>'}).join('')+'<i>KM</i></div>'+
+  '<p class="meta-line">'+(v.year?esc(v.year)+' · ':'')+v.sorties.length+' sortie'+(v.sorties.length>1?'s':'')+' enregistrée'+(v.sorties.length>1?'s':'')+'</p>'+
+  '<button class="cta" data-act="new-sortie">Nouvelle sortie</button></section>';
+  if(al.length)h+='<div class="alerts">'+al.map(function(a){return '<a class="alert '+a.lv+'" href="#'+a.h+'">'+esc(a.t)+'</a>'}).join('')+'</div>';
+  h+='<div class="tiles">'+
+    tile('pieces','Pièces à commander','box',todo.length,est?'environ '+eur(est):'Rien à commander')+
+    tile('entretien','Prochain entretien','wrench',entV,entS)+
+    tile('finances','Finances','euro',eur(f.total)+' <small>investis</small>',eur(f.monthly)+' par mois')+
+    tile('admin','Administratif','folder',v.docs.length+' <small>document'+(v.docs.length>1?'s':'')+'</small>','Carte grise : '+CG[v.cg].toLowerCase())+
+    tile('checklist','Checklist','check',dn+'/'+tot,'éléments faits<div class="bar"><span style="width:'+(tot?Math.round(dn/tot*100):0)+'%"></span></div>')+
+    tile('diagnostic','Diagnostic','pulse','Au démarrage','Guide pas à pas')+
+    tile('ressources','Ressources','book','Manuels et plans','Recherches prêtes à lancer','wide')+
+  '</div>';
+  h+='<div class="sec">Dernières sorties</div>';
+  if(!recent.length)h+='<div class="empty">Aucune sortie pour l’instant. Note le kilométrage au compteur à la fin de chaque sortie.</div>';
+  else h+='<div class="card">'+recent.map(function(r){return '<div class="list-item"><div><span class="num">'+fmtD(r.s.date)+'</span> · <span class="num">'+nf(r.s.km)+' km</span>'+(r.d!==null?' <span class="muted">+'+nf(r.d)+' km</span>':'')+'</div><button class="btn small ghost" data-arm data-act="sortie-del" data-id="'+r.s.id+'">Supprimer</button></div>'}).join('')+'</div>';
+  h+='<div class="foot"><button class="btn small ghost" data-act="vehicle-add">Ajouter un véhicule</button><button class="btn small ghost" data-act="backup">Sauvegarde</button></div>';
+  return h;
+};
+
+PAGES.finances=function(){
+  var v=cur(),f=fin(v);
+  var cats=Object.keys(f.byCat).sort(function(a,b){return f.byCat[b]-f.byCat[a]});
+  var max=cats.length?f.byCat[cats[0]]:1;
+  var h=head('Finances',esc(v.name));
+  h+='<div class="kpis"><div class="kpi"><div class="lb">Investi</div><div class="vl">'+eur(f.total)+'</div></div><div class="kpi"><div class="lb">Par mois</div><div class="vl">'+eur(f.monthly)+'</div></div></div>';
+  h+='<p class="hint" style="margin-top:8px">Moyenne sur '+(f.months<1.5?'1 mois':nf(f.months)+' mois')+(v.since?' depuis le '+fmtD(v.since)+'.':'. Renseigne « Possédé depuis » dans la fiche du véhicule pour un coût mensuel fiable.')+'</p>';
+  h+='<label class="toggle"><input type="checkbox" data-act-change="inclBuy" '+(v.inclBuy?'checked':'')+'> Inclure le prix d’achat dans le coût mensuel</label>';
+  h+='<button class="btn primary block" data-act="exp-add">Ajouter une dépense</button>';
+  if(cats.length){h+='<div class="sec">Répartition</div><div class="card">'+cats.map(function(c){return '<div class="cat"><span>'+esc(c)+'</span><div class="bar"><span style="width:'+Math.round(f.byCat[c]/max*100)+'%"></span></div><span class="num">'+eur(f.byCat[c])+'</span></div>'}).join('')+'</div>'}
+  h+='<div class="sec">Dépenses</div>';
+  var ex=v.expenses.slice().sort(function(a,b){return b.date.localeCompare(a.date)});
+  if(!ex.length)h+='<div class="empty">Aucune dépense. Ajoute le prix d’achat de la moto, une facture, une pièce.</div>';
+  else h+='<div class="card">'+ex.map(function(e){return '<div class="list-item"><div><div class="t">'+esc(e.label)+'</div><div class="muted">'+fmtD(e.date)+' · '+esc(e.cat)+'</div></div><div style="text-align:right"><div class="num">'+eur(e.amount)+'</div><button class="btn small ghost" data-arm data-act="exp-del" data-id="'+e.id+'">Supprimer</button></div></div>'}).join('')+'</div>';
+  return h;
+};
+var CATS=['Achat','Entretien','Pièces','Assurance','Papiers','Équipement','Autre'];
+
+PAGES.admin=function(){
+  var v=cur();
+  var inp=function(label,f,type,extra){return fld(label,f,type||'text',v[f],'data-f="'+f+'" '+(extra||''))};
+  var h=head('Administratif',esc(v.name));
+  h+='<div class="sec">Carte grise</div><div class="card">'+
+    '<label class="fld"><span>Situation</span><select data-f="cg">'+Object.keys(CG).map(function(k){return '<option value="'+k+'"'+(v.cg===k?' selected':'')+'>'+CG[k]+'</option>'}).join('')+'</select></label>'+
+    '<div class="two">'+inp('Immatriculation','plate')+inp('N° de série (VIN)','vin')+'</div></div>';
+  h+='<div class="sec">Assurance</div><div class="card"><div class="two">'+inp('Assureur','insurer')+inp('N° de contrat','contract')+'</div>'+inp('Échéance','insEnd','date')+'</div>';
+  h+='<div class="sec">Contrôle technique</div><div class="card"><div class="two">'+inp('Dernier passage','ctLast','date')+inp('Prochaine échéance','ctNext','date')+'</div></div>';
+  h+='<div class="sec"><span>Documents</span><button class="btn small" data-act="doc-add">Importer</button></div>';
+  if(!v.docs.length)h+='<div class="empty">Importe tes PDF : carte grise, FIV, attestation d’assurance, factures.</div>';
+  else h+='<div class="card">'+v.docs.map(function(d){return '<div class="list-item"><div><div class="t">'+esc(d.name)+'</div><div class="muted">'+esc(d.type)+' · '+fmtD(d.date)+' · '+nf(d.size/1024)+' Ko</div></div><div class="actions" style="margin:0"><button class="btn small" data-act="doc-open" data-id="'+d.id+'">Ouvrir</button><button class="btn small ghost" data-arm data-act="doc-del" data-id="'+d.id+'">Supprimer</button></div></div>'}).join('')+'</div>';
+  h+='<p class="hint" style="margin-top:8px">Les documents restent sur cet appareil. Les dates d’assurance et de contrôle technique déclenchent des alertes sur l’accueil.</p>';
+  return h;
+};
+var DOCT=['Carte grise / FIV','Assurance','Contrôle technique','Facture','Autre'];
+
+PAGES.entretien=function(){
+  var v=cur(),avg=avgKm(v);
+  var rows=v.tasks.map(function(t){return {t:t,s:taskState(v,t)}}).sort(function(a,b){return RANK[a.s.st]-RANK[b.s.st]||((a.s.due||0)-(b.s.due||0))});
+  var h=head('Entretien',esc(v.name)+' · '+nf(v.km)+' km');
+  h+='<p class="hint">'+(avg?'Rythme estimé : <span class="num">'+nf(avg)+' km</span> par mois, calculé sur tes sorties.':'Rythme de roulage inconnu : il faut au moins deux sorties espacées de 15 jours pour estimer les dates.')+' Intervalles indicatifs, à confronter au manuel d’atelier de '+esc(v.name)+'.</p>';
+  h+='<div class="actions"><button class="btn primary" data-act="task-add">Ajouter une tâche</button></div><div class="sec">Plan de maintenance</div><div class="stack">';
+  rows.forEach(function(r){
+    var t=r.t,s=r.s;
+    var iv=[t.km?'tous les '+nf(t.km)+' km':'',t.mo?t.mo+' mois':''].filter(Boolean).join(' ou ');
+    var due;
+    if(s.st==='unknown')due='À faire à la remise en route.';
+    else{due=s.due?'Prévu vers '+fmtM(s.due)+'.':'';if(s.remKm!==null)due+=(s.remKm>0?' Dans '+nf(s.remKm)+' km.':' Dépassé de '+nf(-s.remKm)+' km.')}
+    h+='<article class="card"><div class="row"><h3>'+esc(t.name)+'</h3><span class="pill '+s.st+'">'+ST_LABEL[s.st]+'</span></div><p class="muted">'+esc(iv||'Sans intervalle')+'</p><p class="muted">'+(s.last?'Dernière fois : '+fmtD(s.last.date)+' à '+nf(s.last.km)+' km.':'Jamais enregistré.')+' '+due+'</p><div class="actions"><button class="btn small primary" data-act="task-done" data-id="'+t.id+'">Fait</button>'+(t.parts.length?'<button class="btn small" data-act="task-parts" data-id="'+t.id+'">Pièces</button>':'')+'<button class="btn small ghost" data-act="task-edit" data-id="'+t.id+'">Modifier</button></div></article>';
+  });
+  h+='</div><div class="sec">Historique</div>';
+  var hs=v.history.slice().sort(function(a,b){return b.date.localeCompare(a.date)});
+  if(!hs.length)h+='<div class="empty">Rien d’enregistré. Chaque entretien marqué « Fait » apparaît ici.</div>';
+  else h+='<div class="card">'+hs.map(function(x){return '<div class="list-item"><div><div class="t">'+esc(x.name)+'</div><div class="muted">'+fmtD(x.date)+' · '+nf(x.km)+' km'+(x.cost?' · '+eur(x.cost):'')+(x.note?' · '+esc(x.note):'')+'</div></div><button class="btn small ghost" data-arm data-act="hist-del" data-id="'+x.id+'">Supprimer</button></div>'}).join('')+'</div>';
+  return h;
+};
+
+var PST=[['todo','À commander'],['ordered','Commandé'],['received','Reçu'],['fitted','Monté']];
+var PNEXT={todo:['ordered','Marquer commandé'],ordered:['received','Marquer reçu'],received:['fitted','Marquer monté']};
+var SUGA=['Bougies (x2)','Filtre à air','Huile moteur','Garnitures de frein','Kit réparation carburateur','Courroie de dynamo ou alternateur','Pneus','Joint de bouchon de vidange'];
+var SUG=['Bougie','Filtre à air mousse','Huile moteur 10W-40','Kit chaîne (chaîne, pignon, couronne)','Plaquettes ou mâchoires de frein','Kit réparation carburateur','Durites d’essence','Pneu avant','Pneu arrière','Câble d’embrayage'];
+PAGES.pieces=function(){
+  var v=cur();
+  var h=head('Pièces',esc(v.name));
+  var est=v.parts.filter(function(p){return p.st==='todo'}).reduce(function(a,p){return a+(+p.price||0)*(+p.qty||1)},0);
+  h+='<div class="actions"><button class="btn primary" data-act="part-add">Ajouter une pièce</button></div>';
+  h+='<p class="hint" style="margin-top:8px">Passer une pièce en « Commandé » enregistre la dépense dans les finances.'+(est?' Reste à commander : environ <span class="num">'+eur(est)+'</span>.':'')+'</p>';
+  var any=false;
+  PST.forEach(function(p){
+    var items=v.parts.filter(function(x){return x.st===p[0]});
+    if(!items.length)return;
+    any=true;
+    h+='<div class="sec">'+p[1]+' ('+items.length+')</div><div class="stack">'+items.map(function(x){
+      var tot=(+x.price||0)*(+x.qty||1);
+      return '<article class="card"><div class="row"><h3>'+esc(x.name)+(x.qty>1?' <span class="muted">× '+x.qty+'</span>':'')+'</h3>'+(tot?'<span class="num">'+eur(tot)+'</span>':'')+'</div>'+(x.note?'<p class="muted">'+esc(x.note)+'</p>':'')+'<div class="actions">'+(PNEXT[x.st]?'<button class="btn small primary" data-act="part-next" data-id="'+x.id+'">'+PNEXT[x.st][1]+'</button>':'')+'<button class="btn small ghost" data-act="part-edit" data-id="'+x.id+'">Modifier</button><button class="btn small ghost" data-arm data-act="part-del" data-id="'+x.id+'">Supprimer</button></div></article>';
+    }).join('')+'</div>';
+  });
+  if(!any)h+='<div class="empty" style="margin-top:16px">Aucune pièce. Ajoute-en depuis une tâche d’entretien, depuis le diagnostic ou avec les suggestions.</div>';
+  var have=v.parts.map(function(p){return p.name.toLowerCase()});
+  var sg=(v.type==='auto'?SUGA:SUG).filter(function(s){return have.indexOf(s.toLowerCase())<0}).slice(0,8);
+  if(sg.length)h+='<div class="sec">Suggestions</div><div class="chips">'+sg.map(function(s){return '<button class="chip" data-act="part-sug" data-name="'+esc(s)+'">+ '+esc(s)+'</button>'}).join('')+'</div>';
+  return h;
+};
+
+PAGES.checklist=function(){
+  var v=cur();
+  var h=head('Checklist',esc(v.name));
+  v.lists.forEach(function(l){
+    var dn=l.items.filter(function(i){return i.done}).length;
+    h+='<div class="sec"><span>'+esc(l.name)+'</span><span class="num">'+dn+'/'+l.items.length+'</span></div><div class="card">'+
+    '<div class="bar" style="margin:0 0 4px"><span style="width:'+(l.items.length?Math.round(dn/l.items.length*100):0)+'%"></span></div>'+
+    l.items.map(function(i){
+      var late=!i.done&&i.due&&D(i.due)<new Date();
+      return '<div class="chk '+(i.done?'done':'')+'"><button class="box '+(i.done?'on':'')+'" data-act="chk-toggle" data-l="'+l.id+'" data-i="'+i.id+'" aria-label="Cocher"><span></span></button><button class="tx" data-act="chk-edit" data-l="'+l.id+'" data-i="'+i.id+'">'+esc(i.t)+'</button>'+(i.due?'<span class="pill '+(late?'overdue':'')+'">'+fmtD(i.due)+'</span>':'')+'</div>';
+    }).join('')+
+    '<form class="addrow" data-form="chk-add" data-l="'+l.id+'"><input name="t" placeholder="Ajouter un élément" aria-label="Nouvel élément" required><button class="btn" type="submit">Ajouter</button></form>'+
+    '<div class="actions"><button class="btn small ghost" data-arm data-act="list-del" data-l="'+l.id+'">Supprimer la liste</button></div></div>';
+  });
+  h+='<div class="actions" style="margin-top:16px"><button class="btn" data-act="list-add">Nouvelle liste</button></div>';
+  return h;
+};
+
+/* diagnostic tree */
+var DIAG={
+  start:{q:'Que se passe-t-il quand tu lances le moteur au kick ?',o:[['Aucun signe de vie, pas la moindre explosion','spark'],['Il tousse, pétarade ou démarre puis cale aussitôt','fuel'],['Il démarre, mais le ralenti est instable ou il cale à l’arrêt','air']]},
+  spark:{q:'Dévisse la bougie, remets-la dans son capuchon et plaque son filetage contre la culasse. Donne un coup de kick : vois-tu une étincelle bleue franche ?',o:[['Oui, franche','fuel'],['Faible, orange ou absente','spark2']]},
+  spark2:{q:'Essaie avec une bougie neuve de la bonne référence. L’étincelle est-elle revenue ?',o:[['Oui','e_bougie'],['Non','e_allumage']]},
+  fuel:{q:'Ouvre le robinet d’essence, puis desserre la vis de purge de la cuve du carburateur au-dessus d’un récipient. L’essence coule-t-elle franchement, claire et sans dépôt ?',o:[['Oui, elle coule bien','comp'],['Peu ou pas du tout','e_essence'],['Elle coule, mais elle est trouble ou avec des dépôts','e_essence']]},
+  comp:{q:'Bougie démontée, pose le pouce sur le trou et donne un coup de kick. Sens-tu une forte poussée d’air qui repousse le pouce ?',o:[['Oui, nette','air'],['Faible ou presque rien','e_comp']]},
+  air:{q:'Contrôle l’admission : filtre à air propre et sec, manchons entre la boîte à air et le carburateur sans fissure ni prise d’air. Tout est sain ?',o:[['Oui, tout est sain','e_carbu'],['Filtre sale ou manchon fissuré','e_air']]},
+  e_bougie:{t:'Bougie à remplacer',d:'L’étincelle revient avec une bougie neuve : l’ancienne est hors service. Contrôle l’écartement des électrodes dans le manuel avant de monter la neuve. Si le moteur ne démarre toujours pas, poursuis avec l’arrivée d’essence.',parts:['Bougie'],go:['Contrôler l’essence','fuel']},
+  e_allumage:{t:'Allumage à contrôler',d:'Pas d’étincelle même avec une bougie neuve. Contrôle dans l’ordre : capuchon de bougie et câble HT (fissures, oxydation), masse et connecteurs, bobine, puis boîtier d’allumage et capteur. Les mesures au multimètre sont à comparer aux valeurs du manuel d’atelier.',parts:['Capuchon de bougie','Bobine d’allumage']},
+  e_essence:{t:'Alimentation en essence',d:'Essence absente, trouble ou éventée après une longue immobilisation : vidange le réservoir, nettoie le robinet et son filtre, contrôle les durites (pliées, craquelées), puis démonte et nettoie le carburateur (gicleurs, pointeau, cuve). Travaille loin de toute flamme.',parts:['Kit réparation carburateur','Durites d’essence']},
+  e_comp:{t:'Compression faible',d:'Une compression faible vient souvent d’un jeu aux soupapes mal réglé, d’une soupape qui fuit, de segments usés ou d’un joint de culasse. Contrôle d’abord le jeu aux soupapes, puis mesure avec un compressiomètre et compare au manuel.',parts:['Joints de cache-culbuteurs']},
+  e_air:{t:'Admission à remettre en état',d:'Un filtre colmaté ou une prise d’air parasite fausse le mélange : le moteur démarre mal et cale. Nettoie ou remplace le filtre, remplace les manchons fissurés et resserre les colliers.',parts:['Filtre à air mousse','Manchons d’admission']},
+  e_carbu:{t:'Carburateur encrassé (cause probable)',d:'Étincelle, essence, compression et admission semblent bonnes : le carburateur est le premier suspect sur une moto restée longtemps à l’arrêt, souvent à cause d’un gicleur de ralenti bouché. Fais un démontage et un nettoyage complets avec joints neufs, puis règle la richesse et le ralenti.',parts:['Kit réparation carburateur']}
+};
+function dx(s,v){return v.type==='auto'?s.replace(/coup de kick/g,'tour de démarreur').replace(/au kick/g,'au démarreur'):s}
+var diagNode='start',diagPath=[];
+PAGES.diagnostic=function(){
+  var v=cur(),n=DIAG[diagNode];
+  var h=head('Diagnostic','Ne démarre pas · '+esc(v.name));
+  h+='<div class="card">';
+  if(n.q){
+    h+='<p class="q">'+esc(dx(n.q,v))+'</p><div class="opts">'+n.o.map(function(o){return '<button class="btn" data-act="diag-go" data-to="'+o[1]+'">'+esc(o[0])+'</button>'}).join('')+'</div>';
+    if(diagPath.length)h+='<div class="actions"><button class="btn small ghost" data-act="diag-back">Étape précédente</button><button class="btn small ghost" data-act="diag-reset">Recommencer</button></div>';
+  }else{
+    h+='<h3>'+esc(n.t)+'</h3><p>'+esc(n.d)+'</p><div class="actions">'+n.parts.map(function(p){return '<button class="btn small" data-act="diag-part" data-name="'+esc(p)+'">+ '+esc(p)+'</button>'}).join('')+'</div>'+
+    '<div class="actions">'+(n.go?'<button class="btn small primary" data-act="diag-go" data-to="'+n.go[1]+'">'+esc(n.go[0])+'</button>':'')+'<button class="btn small" data-act="diag-note">Noter dans le journal</button><button class="btn small ghost" data-act="diag-reset">Recommencer</button></div><p class="hint">Les pièces proposées sont des pistes à confirmer après démontage.</p>';
+  }
+  h+='</div><div class="sec">Journal du diagnostic</div><form class="card" data-form="note-add"><textarea name="t" placeholder="Ce que tu as testé, mesuré, remplacé…" aria-label="Nouvelle note" required></textarea><button class="btn primary" type="submit">Ajouter la note</button></form>';
+  var ns=v.notes.slice().sort(function(a,b){return b.date.localeCompare(a.date)});
+  if(ns.length)h+='<div class="card" style="margin-top:10px">'+ns.map(function(x){return '<div class="list-item"><div><div class="muted">'+fmtD(x.date)+'</div><div class="t">'+esc(x.t)+'</div></div><button class="btn small ghost" data-arm data-act="note-del" data-id="'+x.id+'">Supprimer</button></div>'}).join('')+'</div>';
+  return h;
+};
+
+var g=function(q){return 'https://www.google.com/search?q='+encodeURIComponent(q)};
+var gi=function(q){return 'https://www.google.com/search?tbm=isch&q='+encodeURIComponent(q)};
+var yt=function(q){return 'https://www.youtube.com/results?search_query='+encodeURIComponent(q)};
+var RES=[
+  ['Documentation',[['Manuel d’atelier XL600R (PDF)',g('Honda XL600R manuel atelier pdf')],['Manuel du propriétaire',g('Honda XL600R owners manual pdf')],['Schéma électrique',g('Honda XL600R wiring diagram')]]],
+  ['Pièces',[['Vues éclatées et références',g('Honda XL600R parts diagram exploded view')],['Pièces d’occasion',g('pièces Honda XL600R occasion')]]],
+  ['Visuels et 3D',[['Modèles 3D',g('Honda XL600R 3D model')],['Photos de la XL600R',gi('Honda XL600R 1987')]]],
+  ['Communauté',[['Forums : remise en route',g('Honda XL600R forum remise en route')],['Vidéos : démontage et entretien',yt('Honda XL600R entretien démontage')]]]
+];
+PAGES.ressources=function(){
+  var v=cur();
+  var h=head('Ressources',esc(v.name));
+  h+='<p class="hint">Ces liens lancent des recherches ciblées. Enregistre en dessous ceux qui te servent.</p>';
+  var nm=encodeURIComponent(v.name),yr=v.year?'%20'+v.year:'';
+  RES.forEach(function(c){h+='<div class="sec">'+c[0]+'</div><div class="stack">'+c[1].map(function(l){var u=l[1].replace(/Honda%20XL600R/g,nm).replace(/%201987/g,yr),lab=l[0].replace(/(Honda )?XL600R/,function(){return v.name});return '<a class="link" href="'+u+'" target="_blank" rel="noopener noreferrer">'+esc(lab)+'<span>↗</span></a>'}).join('')+'</div>'});
+  h+='<div class="sec"><span>Mes liens</span><button class="btn small" data-act="link-add">Ajouter</button></div>';
+  if(!v.links.length)h+='<div class="empty">Aucun lien enregistré.</div>';
+  else h+='<div class="stack">'+v.links.map(function(l){return '<div class="link"><a href="'+esc(l.url)+'" target="_blank" rel="noopener noreferrer" style="flex:1;min-width:0;overflow-wrap:anywhere;text-decoration:none">'+esc(l.title)+' <span>↗</span></a><button class="btn small ghost" data-arm data-act="link-del" data-id="'+l.id+'">Supprimer</button></div>'}).join('')+'</div>';
+  return h;
+};
+
+/* ---------- render / router ---------- */
+function render(keep){
+  applyTheme(cur());var y=window.scrollY;
+  var p=(location.hash||'#accueil').slice(1);
+  if(!PAGES[p])p='accueil';
+  app.innerHTML=PAGES[p]();
+  window.scrollTo(0,keep?y:0);
+}
+window.addEventListener('hashchange',function(){closeSheet();render()});
+
+/* ---------- sheets ---------- */
+var PRESETS=[['#1f4f9c','Bleu Honda'],['#4c8c4a','Vert'],['#b8322a','Rouge'],['#c98a1b','Ocre'],['#7fb7ca','Bleu ciel'],['#8a8f94','Gris']];
+function colorFld(o){return '<div class="fld"><span>Couleur du véhicule</span><div class="swatches">'+PRESETS.map(function(p){return '<button type="button" class="sw" style="background:'+p[0]+'" data-act="set-color" data-c="'+p[0]+'" aria-label="'+p[1]+'"></button>'}).join('')+'</div><input type="color" name="color" value="'+esc(o.color||BLUE)+'" aria-label="Couleur personnalisée"></div>'}
+var pendPhoto;
+function vehicleSheet(v){
+  var isNew=!v,o=v||newVehicle({km:0});
+  pendPhoto=undefined;
+  sheet(isNew?'Nouveau véhicule':'Modifier le véhicule',
+    (isNew?sel('Type','type',[['moto','Moto'],['auto','Voiture']],'moto'):'')+fld('Nom','name','text',o.name,'required placeholder="Honda XL600R"')+
+    '<div class="two">'+fld('Année','year','number',o.year,'inputmode="numeric"')+fld('Kilométrage','km','number',o.km,'inputmode="numeric" min="0"')+'</div>'+
+    fld('Possédé depuis','since','date',o.since)+colorFld(o)+
+    '<div class="fld"><span>Photo (remplace le dessin)</span><div class="photo-row"><input type="file" id="photofile" accept="image/*"><button type="button" class="btn small ghost" data-act="photo-clear">Retirer</button></div></div>'+
+    ((!isNew&&S.vehicles.length>1)?'<div class="fld"><button type="button" class="btn small" data-arm data-act="vehicle-del">Supprimer ce véhicule</button></div>':''),
+    function(fd){
+      if(isNew)o=newVehicle({type:fd.get('type')||'moto',km:0});var t=isNew?o:v;t.color=fd.get('color')||t.color;
+      t.name=String(fd.get('name')).trim();t.year=fd.get('year');t.km=Math.max(0,Math.round(+fd.get('km')||0));t.since=fd.get('since')||'';
+      if(pendPhoto!==undefined)t.photo=pendPhoto;
+      if(isNew){S.vehicles.push(o);S.cur=o.id}
+      save();render(true);
+    });
+}
+function sortieSheet(){
+  var v=cur();
+  sheet('Nouvelle sortie',fld('Date','date','date',today(),'required')+fld('Kilométrage au compteur, fin de sortie','km','number',v.km,'required inputmode="numeric" min="0" step="1"')+'<p class="hint" style="margin:-4px 0 8px">Dernier relevé : '+nf(v.km)+' km.</p>',function(fd){
+    var km=Math.round(+fd.get('km'));
+    if(!(km>=v.km)){toast('Le compteur doit être au moins à '+nf(v.km)+' km');return false}
+    var d=km-v.km;
+    v.sorties.push({id:uid(),date:fd.get('date')||today(),km:km});v.km=km;save();render(true);toast(d?'+'+nf(d)+' km enregistrés':'Sortie enregistrée');
+  });
+}
+function expSheet(){
+  var v=cur();
+  sheet('Nouvelle dépense',fld('Date','date','date',today(),'required')+fld('Libellé','label','text','','required placeholder="Kit chaîne"')+fld('Montant (€)','amount','number','','required inputmode="decimal" step="0.01" min="0"')+sel('Catégorie','cat',CATS,'Pièces'),function(fd){
+    v.expenses.push({id:uid(),date:fd.get('date'),label:String(fd.get('label')).trim(),amount:+fd.get('amount')||0,cat:fd.get('cat')});save();render(true);
+  });
+}
+function docSheet(){
+  var v=cur();
+  sheet('Importer un document','<label class="fld"><span>Fichier (PDF ou image)</span><input type="file" id="docfile" accept="application/pdf,image/*" required></label>'+fld('Nom','name','text','','required')+sel('Type','type',DOCT,'Carte grise / FIV'),function(fd){
+    var f=$('#docfile').files[0];
+    if(!f){toast('Choisis un fichier');return false}
+    if(f.size>25*1024*1024){toast('Fichier trop lourd (25 Mo maximum)');return false}
+    var id=uid(),name=String(fd.get('name')).trim()||f.name,type=fd.get('type');
+    idbPut(id,f).then(function(){v.docs.push({id:id,name:name,type:type,date:today(),size:f.size});save();render(true);toast('Document importé')}).catch(function(){toast('Import impossible sur cet appareil')});
+  });
+}
+function doneSheet(t){
+  var v=cur();
+  sheet('Entretien fait',  '<p style="margin-bottom:12px">'+esc(t.name)+'</p>'+fld('Date','date','date',today(),'required')+fld('Kilométrage','km','number',v.km,'required inputmode="numeric" min="0"')+fld('Coût (€, facultatif)','cost','number','','inputmode="decimal" step="0.01" min="0"')+fld('Note','note','text','','placeholder="Huile utilisée, remarque…"'),function(fd){
+    var km=Math.round(+fd.get('km')),cost=+fd.get('cost')||0,e={id:uid(),taskId:t.id,name:t.name,date:fd.get('date'),km:km,cost:cost,note:String(fd.get('note')).trim()};
+    if(cost>0){var x={id:uid(),date:e.date,label:t.name,amount:cost,cat:'Entretien'};v.expenses.push(x);e.expId=x.id}
+    v.history.push(e);if(km>v.km)v.km=km;save();render(true);toast('Entretien enregistré');
+  },'Valider');
+}
+function taskSheet(t){
+  var v=cur(),isNew=!t;t=t||{id:uid(),name:'',km:0,mo:0,parts:[]};
+  sheet(isNew?'Nouvelle tâche':'Modifier la tâche',fld('Tâche','name','text',t.name,'required')+'<div class="two">'+fld('Tous les (km)','km','number',t.km||'','inputmode="numeric" min="0"')+fld('Ou tous les (mois)','mo','number',t.mo||'','inputmode="numeric" min="0"')+'</div>'+(isNew?'':'<div class="fld"><button type="button" class="btn small" data-arm data-act="task-del" data-id="'+t.id+'">Supprimer la tâche</button></div>'),function(fd){
+    t.name=String(fd.get('name')).trim();t.km=Math.round(+fd.get('km'))||0;t.mo=Math.round(+fd.get('mo'))||0;
+    if(isNew)v.tasks.push(t);save();render(true);
+  });
+}
+function partSheet(p){
+  var v=cur(),isNew=!p;p=p||{id:uid(),name:'',note:'',qty:1,price:'',st:'todo'};
+  sheet(isNew?'Nouvelle pièce':'Modifier la pièce',fld('Pièce','name','text',p.name,'required')+fld('Référence ou fournisseur','note','text',p.note,'placeholder="Réf. 12345, boutique…"')+'<div class="two">'+fld('Quantité','qty','number',p.qty,'inputmode="numeric" min="1"')+fld('Prix unitaire (€)','price','number',p.price,'inputmode="decimal" step="0.01" min="0"')+'</div>',function(fd){
+    p.name=String(fd.get('name')).trim();p.note=String(fd.get('note')).trim();p.qty=Math.max(1,Math.round(+fd.get('qty'))||1);p.price=fd.get('price');
+    if(isNew)v.parts.push(p);save();render(true);
+  });
+}
+function addPart(v,name,note){
+  if(v.parts.some(function(p){return p.name.toLowerCase()===name.toLowerCase()&&p.st==='todo'}))return false;
+  v.parts.push({id:uid(),name:name,note:note||'',qty:1,price:'',st:'todo'});return true;
+}
+function chkSheet(l,i){
+  sheet('Modifier l’élément',fld('Élément','t','text',i.t,'required')+fld('Échéance (alerte sur l’accueil)','due','date',i.due)+'<div class="fld"><button type="button" class="btn small" data-arm data-act="chk-del" data-l="'+l.id+'" data-i="'+i.id+'">Supprimer l’élément</button></div>',function(fd){
+    i.t=String(fd.get('t')).trim();i.due=fd.get('due')||'';save();render(true);
+  });
+}
+function linkSheet(){
+  var v=cur();
+  sheet('Nouveau lien',fld('Titre','title','text','','required')+fld('Adresse','url','url','','required placeholder="https://"'),function(fd){
+    var u=String(fd.get('url')).trim();
+    if(!/^https?:\/\//i.test(u)){toast('L’adresse doit commencer par http:// ou https://');return false}
+    v.links.push({id:uid(),title:String(fd.get('title')).trim(),url:u});save();render(true);
+  });
+}
+function backupSheet(){
+  var json=JSON.stringify(S);
+  sheet('Sauvegarde','<p class="hint" style="margin-bottom:10px">Copie ce texte et garde-le dans un fichier sur ton Drive. Les PDF importés ne sont pas inclus.</p><textarea id="bk" readonly style="font:12px var(--f-mono)">'+esc(json)+'</textarea><button type="button" class="btn small" data-act="backup-copy" style="margin:8px 0 16px">Copier la sauvegarde</button>'+'<label class="fld"><span>Restaurer : colle une sauvegarde ici</span><textarea name="paste" placeholder="{...}"></textarea></label>',function(fd){
+    var t=String(fd.get('paste')).trim();
+    if(!t){toast('Colle une sauvegarde à restaurer');return false}
+    try{var o=JSON.parse(t);if(!o.vehicles||!o.vehicles.length)throw 0;S=o;save();render();toast('Sauvegarde restaurée')}catch(e){toast('Sauvegarde illisible');return false}
+  },'Restaurer');
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-act]');if(!b)return;
+  if(b.hasAttribute('data-arm')&&!b.classList.contains('armed')){
+    b.classList.add('armed');b._t=b.textContent;b.textContent='Confirmer ?';
+    setTimeout(function(){if(b.isConnected){b.classList.remove('armed');b.textContent=b._t}},3000);return;
+  }
+  var a=b.dataset.act,v=cur(),id=b.dataset.id;
+  var by=function(arr,i){return arr.find(function(x){return x.id===i})};
+  switch(a){
+    case 'close':closeSheet();break;
+    case 'prev':case 'next':{var k=S.vehicles.indexOf(v),n=S.vehicles.length;S.cur=S.vehicles[(k+(a==='next'?1:n-1))%n].id;save();render(true);break}
+    case 'vehicle-edit':vehicleSheet(v);break;
+    case 'vehicle-add':vehicleSheet(null);break;
+    case 'vehicle-del':{var rest=S.vehicles.filter(function(x){return x.id!==v.id});if(rest.length){S.vehicles=rest;S.cur=rest[0].id;save();closeSheet();render(true)}break}
+    case 'set-color':{var ci=document.querySelector('#sheet [name=color]');if(ci)ci.value=b.dataset.c;break}
+    case 'photo-clear':pendPhoto='';toast('Photo retirée, enregistre pour appliquer');break;
+    case 'new-sortie':sortieSheet();break;
+    case 'sortie-del':{v.sorties=v.sorties.filter(function(s){return s.id!==id});var mx=Math.max.apply(null,v.sorties.map(function(s){return s.km}));if(isFinite(mx))v.km=mx;save();render(true);break}
+    case 'exp-add':expSheet();break;
+    case 'exp-del':v.expenses=v.expenses.filter(function(x){return x.id!==id});save();render(true);break;
+    case 'doc-add':docSheet();break;
+    case 'doc-open':{idbGet(id).then(function(bl){if(!bl){toast('Fichier introuvable sur cet appareil');return}var u=URL.createObjectURL(bl),l=document.createElement('a');l.href=u;l.target='_blank';l.rel='noopener';document.body.appendChild(l);l.click();l.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000)}).catch(function(){toast('Impossible d’ouvrir ce fichier ici')});break}
+    case 'doc-del':v.docs=v.docs.filter(function(x){return x.id!==id});idbDel(id).catch(function(){});save();render(true);break;
+    case 'task-done':doneSheet(by(v.tasks,id));break;
+    case 'task-parts':{var t=by(v.tasks,id),c=0;t.parts.forEach(function(p){if(addPart(v,p,'Pour : '+t.name))c++});save();toast(c?c+' pièce'+(c>1?'s ajoutées':' ajoutée')+' à commander':'Déjà dans la liste');break}
+    case 'task-edit':taskSheet(by(v.tasks,id));break;
+    case 'task-add':taskSheet(null);break;
+    case 'task-del':v.tasks=v.tasks.filter(function(x){return x.id!==id});save();closeSheet();render(true);break;
+    case 'hist-del':{var hx=by(v.history,id);if(hx&&hx.expId)v.expenses=v.expenses.filter(function(x){return x.id!==hx.expId});v.history=v.history.filter(function(x){return x.id!==id});save();render(true);break}
+    case 'part-add':partSheet(null);break;
+    case 'part-edit':partSheet(by(v.parts,id));break;
+    case 'part-del':v.parts=v.parts.filter(function(x){return x.id!==id});save();render(true);break;
+    case 'part-sug':addPart(v,b.dataset.name);save();render(true);break;
+    case 'part-next':{var p=by(v.parts,id),nx=PNEXT[p.st];
+      if(nx[0]==='ordered'){var tot=(+p.price||0)*(+p.qty||1);if(tot>0&&!p.expId){var x={id:uid(),date:today(),label:p.name,amount:tot,cat:'Pièces'};v.expenses.push(x);p.expId=x.id;toast('Dépense de '+eur(tot)+' ajoutée')}}
+      p.st=nx[0];save();render(true);break}
+    case 'chk-toggle':{var l=by(v.lists,b.dataset.l),i=by(l.items,b.dataset.i);i.done=!i.done;save();render(true);break}
+    case 'chk-edit':{var l2=by(v.lists,b.dataset.l);chkSheet(l2,by(l2.items,b.dataset.i));break}
+    case 'chk-del':{var l3=by(v.lists,b.dataset.l);l3.items=l3.items.filter(function(x){return x.id!==b.dataset.i});save();closeSheet();render(true);break}
+    case 'list-add':sheet('Nouvelle liste',fld('Nom','name','text','','required placeholder="Voyage, achats…"'),function(fd){v.lists.push({id:uid(),name:String(fd.get('name')).trim(),items:[]});save();render(true)});break;
+    case 'list-del':v.lists=v.lists.filter(function(x){return x.id!==b.dataset.l});save();render(true);break;
+    case 'diag-go':diagPath.push(diagNode);diagNode=b.dataset.to;render();break;
+    case 'diag-back':diagNode=diagPath.pop()||'start';render();break;
+    case 'diag-reset':diagNode='start';diagPath=[];render();break;
+    case 'diag-part':toast(addPart(v,b.dataset.name,'Piste du diagnostic')?'Ajouté aux pièces à commander':'Déjà dans la liste');save();break;
+    case 'diag-note':{var nd=DIAG[diagNode];v.notes.push({id:uid(),date:today(),t:'Diagnostic : '+nd.t+'.'});save();render(true);toast('Note ajoutée');break}
+    case 'note-del':v.notes=v.notes.filter(function(x){return x.id!==id});save();render(true);break;
+    case 'link-add':linkSheet();break;
+    case 'link-del':v.links=v.links.filter(function(x){return x.id!==id});save();render(true);break;
+    case 'backup':backupSheet();break;
+    case 'backup-copy':{var ta=$('#bk');ta.select();var ok=function(){toast('Sauvegarde copiée')},ko=function(){toast('Sélectionne le texte et copie-le à la main')};
+      if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(ta.value).then(ok,ko);else ko();break}
+  }
+});
+document.addEventListener('submit',function(e){
+  var f=e.target.closest('[data-form]');if(!f)return;
+  e.preventDefault();
+  var v=cur(),fd=new FormData(f),t=String(fd.get('t')).trim();if(!t)return;
+  if(f.dataset.form==='chk-add'){var l=v.lists.find(function(x){return x.id===f.dataset.l});l.items.push(I(t))}
+  if(f.dataset.form==='note-add'){v.notes.push({id:uid(),date:today(),t:t})}
+  save();render(true);
+});
+document.addEventListener('change',function(e){
+  var el=e.target,v=cur();
+  if(el.name==='type'&&el.closest('#sheet')){var cf=document.querySelector('#sheet [name=color]');if(cf)cf.value=el.value==='auto'?GREEN:BLUE;return}
+  if(el.dataset.f){v[el.dataset.f]=el.value;save();return}
+  if(el.dataset.actChange==='inclBuy'){v.inclBuy=el.checked;save();render(true);return}
+  if(el.id==='photofile'&&el.files[0]){resizeImg(el.files[0],1000).then(function(d){pendPhoto=d;toast('Photo prête, enregistre pour l’appliquer')}).catch(function(){toast('Image illisible')})}
+  if(el.id==='docfile'&&el.files[0]){var n=document.querySelector('#sheet [name=name]');if(n&&!n.value)n.value=el.files[0].name.replace(/\.[^.]+$/,'')}
+});
+
+render();
+})();
+</script>
+<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
+
+</body>
+</html>
