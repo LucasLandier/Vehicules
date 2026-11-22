@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Carnet Moto">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0d1012">
+<script>window.GD_ENABLED=true</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <title>Carnet Moto</title>
@@ -247,7 +248,7 @@ try{var raw=localStorage.getItem(KEY);S=raw?JSON.parse(raw):null}catch(e){S=null
 if(!S||!S.vehicles||!S.vehicles.length)S=seed();
 S.vehicles.forEach(function(v){if(!v.type)v.type='moto';if(!v.color)v.color=v.type==='auto'?GREEN:BLUE});
 if(!S.v2){S.v2=1;if(!S.vehicles.some(function(v){return /2cv/i.test(v.name)}))S.vehicles.push(newVehicle({name:'Citroën 2CV',type:'auto'}))}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Enregistrement impossible sur cet appareil')}}
+function save(){try{S.updated=Date.now();localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Enregistrement impossible sur cet appareil')}gdSchedule()}
 var cur=function(){return S.vehicles.find(function(v){return v.id===S.cur})||S.vehicles[0]};
 
 /* ---------- per-vehicle colour ---------- */
@@ -454,7 +455,7 @@ PAGES.accueil=function(){
   h+='<div class="sec">Dernières sorties</div>';
   if(!recent.length)h+='<div class="empty">Aucune sortie pour l’instant. Note le kilométrage au compteur à la fin de chaque sortie.</div>';
   else h+='<div class="card">'+recent.map(function(r){return '<div class="list-item"><div><span class="num">'+fmtD(r.s.date)+'</span> · <span class="num">'+nf(r.s.km)+' km</span>'+(r.d!==null?' <span class="muted">+'+nf(r.d)+' km</span>':'')+'</div><button class="btn small ghost" data-arm data-act="sortie-del" data-id="'+r.s.id+'">Supprimer</button></div>'}).join('')+'</div>';
-  h+='<div class="foot"><button class="btn small ghost" data-act="vehicle-add">Ajouter un véhicule</button><button class="btn small ghost" data-act="backup">Sauvegarde</button></div>';
+  h+='<div class="foot"><button class="btn small ghost" data-act="vehicle-add">Ajouter un véhicule</button><button class="btn small ghost" data-act="backup">Sauvegarde</button>'+(gdLinked()?'<button class="btn small ghost" id="gdline" data-act="gd-line">'+esc(gdLine())+'</button>':'')+'</div>';
   return h;
 };
 
@@ -711,12 +712,127 @@ function linkSheet(){
 }
 function backupSheet(){
   var json=JSON.stringify(S);
-  sheet('Sauvegarde','<p class="hint" style="margin-bottom:10px">Copie ce texte et garde-le dans un fichier sur ton Drive. Les PDF importés ne sont pas inclus.</p><textarea id="bk" readonly style="font:12px var(--f-mono)">'+esc(json)+'</textarea><button type="button" class="btn small" data-act="backup-copy" style="margin:8px 0 16px">Copier la sauvegarde</button>'+'<label class="fld"><span>Restaurer : colle une sauvegarde ici</span><textarea name="paste" placeholder="{...}"></textarea></label>',function(fd){
+  if(window.GD_ENABLED)gdLoad().catch(function(){});
+  sheet('Sauvegarde',gdBlock()+'<p class="hint" style="margin-bottom:10px">Sauvegarde manuelle : copie ce texte et garde-le dans un fichier sur ton Drive. Les PDF importés ne sont pas inclus.</p><textarea id="bk" readonly style="font:12px var(--f-mono)">'+esc(json)+'</textarea><button type="button" class="btn small" data-act="backup-copy" style="margin:8px 0 16px">Copier la sauvegarde</button>'+'<label class="fld"><span>Restaurer : colle une sauvegarde ici</span><textarea name="paste" placeholder="{...}"></textarea></label>',function(fd){
     var t=String(fd.get('paste')).trim();
     if(!t){toast('Colle une sauvegarde à restaurer');return false}
     try{var o=JSON.parse(t);if(!o.vehicles||!o.vehicles.length)throw 0;S=o;save();render();toast('Sauvegarde restaurée')}catch(e){toast('Sauvegarde illisible');return false}
   },'Restaurer');
 }
+
+/* ---------- Google Drive sync (site hébergé uniquement) ---------- */
+var GD_FILE='carnet-moto.json',GD_SCOPE='https://www.googleapis.com/auth/drive.appdata';
+var gd={tok:null,exp:0,client:null,cid:'',timer:null,busy:false,fileId:null,pend:null,needAuth:false,gt:false,lp:null,cb:null,eb:null};
+function gdGet(k){try{return localStorage.getItem(k)||''}catch(e){return ''}}
+function gdSet(k,v){try{if(v)localStorage.setItem(k,v);else localStorage.removeItem(k)}catch(e){}}
+function gdLinked(){return !!(window.GD_ENABLED&&gdGet('gd-client')&&gdGet('gd-linked')==='1')}
+function gdReady(){return !!(window.google&&google.accounts&&google.accounts.oauth2)}
+function gdLoad(){
+  if(gdReady())return Promise.resolve();
+  if(gd.lp)return gd.lp;
+  gd.lp=new Promise(function(res,rej){var s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.async=true;s.onload=function(){res()};s.onerror=function(){gd.lp=null;rej(new Error('load'))};document.head.appendChild(s)});
+  return gd.lp;
+}
+function gdToken(interactive){
+  if(gd.tok&&Date.now()<gd.exp-60000)return Promise.resolve(gd.tok);
+  if(gd.pend)return gd.pend;
+  gd.pend=new Promise(function(res,rej){
+    var fail=function(e){gd.needAuth=true;rej(e)};
+    var go=function(){
+      try{
+        var cid=gdGet('gd-client');
+        if(!cid){fail(new Error('client'));return}
+        if(!gd.client||gd.cid!==cid){gd.cid=cid;gd.client=google.accounts.oauth2.initTokenClient({client_id:cid,scope:GD_SCOPE,callback:function(r){gd.cb(r)},error_callback:function(e){gd.eb(e)}})}
+        gd.cb=function(r){if(r&&r.access_token){gd.tok=r.access_token;gd.exp=Date.now()+(+r.expires_in||3600)*1000;gd.needAuth=false;res(gd.tok)}else fail(new Error((r&&r.error)||'auth'))};
+        gd.eb=function(e){fail(new Error((e&&e.type)||'popup'))};
+        gd.client.requestAccessToken({prompt:interactive?'':'none'});
+      }catch(e){fail(e)}
+    };
+    if(gdReady())go();else gdLoad().then(go,fail);
+  });
+  var clr=function(){gd.pend=null};gd.pend.then(clr,clr);
+  return gd.pend;
+}
+function gdApi(url,opt){
+  return gdToken(false).then(function(t){
+    opt=opt||{};opt.headers=Object.assign({Authorization:'Bearer '+t},opt.headers||{});
+    return fetch(url,opt);
+  }).then(function(r){
+    if(r.status===401){gd.tok=null;gd.needAuth=true;throw new Error('http 401')}
+    if(!r.ok)throw new Error('http '+r.status);
+    return r;
+  });
+}
+function gdFind(){
+  return gdApi('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&pageSize=1&fields='+encodeURIComponent('files(id,modifiedTime)')+'&q='+encodeURIComponent("name='"+GD_FILE+"'"))
+    .then(function(r){return r.json()}).then(function(j){var f=(j.files&&j.files[0])||null;gd.fileId=f?f.id:null;return f});
+}
+function gdRead(id){return gdApi('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media').then(function(r){return r.json()})}
+function gdWrite(){
+  var body=JSON.stringify(S),p;
+  if(gd.fileId)p=gdApi('https://www.googleapis.com/upload/drive/v3/files/'+gd.fileId+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':'application/json'},body:body});
+  else p=gdApi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{method:'POST',headers:{'Content-Type':'multipart/related; boundary=cmb'},body:'--cmb\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify({name:GD_FILE,parents:['appDataFolder']})+'\r\n--cmb\r\nContent-Type: application/json\r\n\r\n'+body+'\r\n--cmb--'});
+  return p.then(function(r){return r.json()}).then(function(j){gd.fileId=j.id||gd.fileId;gdSet('gd-last',String(Date.now()));gdSet('gd-err','')});
+}
+function gdSchedule(){
+  if(!gdLinked()||gd.needAuth)return;
+  clearTimeout(gd.timer);
+  gd.timer=setTimeout(function(){gd.timer=null;gdPush()},4000);
+}
+function gdPush(){
+  if(gd.busy){gdSchedule();return Promise.resolve()}
+  gd.busy=true;
+  return (gd.fileId?Promise.resolve():gdFind()).then(function(){return gdWrite()}).then(function(){gdStatus()}).catch(function(e){
+    if(e&&e.message==='http 404')gd.fileId=null;
+    gdSet('gd-err',(e&&e.message)||'err');gdStatus();
+  }).then(function(){gd.busy=false});
+}
+function gdSync(){
+  return gdFind().then(function(f){
+    if(!f)return gdWrite();
+    return gdRead(f.id).then(function(r){
+      var rem=+r.updated||0,loc=+S.updated||0;
+      if(rem>loc+1000){gdAskRestore(r,rem);return}
+      if(loc>rem)return gdWrite();
+      gdSet('gd-last',String(Date.now()));gdSet('gd-err','');
+    });
+  });
+}
+function norm(v){if(!v.type)v.type='moto';if(!v.color)v.color=v.type==='auto'?GREEN:BLUE}
+function gdAskRestore(r,rem){
+  var n=(r.vehicles||[]).length;
+  sheet('Sauvegarde Drive plus récente','<p>Une sauvegarde du '+esc(new Date(rem).toLocaleString('fr-FR'))+' ('+n+' véhicule'+(n>1?'s':'')+') existe sur ton Drive et elle est plus récente que les données de cet appareil.</p><p class="hint" style="margin:8px 0 12px">Restaurer remplace les données de cet appareil. Annuler les garde : elles remplaceront alors la sauvegarde Drive à ta prochaine modification.</p>',function(){
+    if(!r.vehicles||!r.vehicles.length){toast('Sauvegarde illisible');return false}
+    S=r;S.vehicles.forEach(norm);save();render();toast('Données restaurées depuis Drive');
+  },'Restaurer');
+}
+function gdErrMsg(e){
+  e=String(e||'');
+  if(/403/.test(e))return 'accès refusé (API Drive ou identifiant à vérifier)';
+  if(e==='load')return 'Google injoignable';
+  if(/^http 5/.test(e))return 'Google indisponible, nouvel essai plus tard';
+  if(/401|popup|auth|denied|required|immediate|client/i.test(e))return 'à reconnecter';
+  return 'échec ('+e+')';
+}
+function gdLine(){
+  var e=gdGet('gd-err'),l=+gdGet('gd-last');
+  if(e)return 'Drive : '+gdErrMsg(e);
+  return l?'Drive : sauvegardé le '+new Date(l).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'Drive : en attente';
+}
+function gdStatus(){var el=$('#gdline');if(el)el.textContent=gdLine()}
+function gdReauth(){
+  return gdToken(true).then(function(){gdSet('gd-err','');return gdSync()}).then(function(){gdStatus()}).catch(function(e){gdSet('gd-err',(e&&e.message)||'err');gdStatus();toast('Connexion Google impossible : '+((e&&e.message)||'erreur'))});
+}
+function gdBlock(){
+  if(!window.GD_ENABLED)return '';
+  var linked=gdLinked(),last=+gdGet('gd-last'),err=gdGet('gd-err');
+  return '<div class="fld"><span>Sauvegarde automatique sur Google Drive</span><input id="gdclient" placeholder="Identifiant client Google (…apps.googleusercontent.com)" value="'+esc(gdGet('gd-client'))+'" autocapitalize="off" autocorrect="off" spellcheck="false"><div class="actions"><button type="button" class="btn small primary" data-act="gd-connect">'+(linked?'Reconnecter':'Se connecter')+'</button>'+(linked?'<button type="button" class="btn small" data-act="gd-now">Sauvegarder maintenant</button><button type="button" class="btn small ghost" data-arm data-act="gd-off">Déconnecter</button>':'')+'</div><p class="hint">'+(linked?((last?'Dernière sauvegarde : '+esc(new Date(last).toLocaleString('fr-FR'))+'.':'Connecté, pas encore de sauvegarde.')+(err?' Dernier problème : '+esc(gdErrMsg(err))+'.':'')):'Les données sont envoyées dans un dossier caché de ton Drive, réservé à cette application.')+'</p></div>';
+}
+document.addEventListener('visibilitychange',function(){if(document.hidden&&gd.timer){clearTimeout(gd.timer);gd.timer=null;gdPush()}});
+document.addEventListener('click',function(e){
+  if(e.target.closest&&e.target.closest('[data-act^="gd-"]'))return;
+  if(gd.needAuth&&gdLinked()&&!gd.gt&&!gd.busy){gd.gt=true;gdToken(false).then(gdSync).then(function(){gdSet('gd-err','');gdStatus()}).catch(function(x){gdSet('gd-err',(x&&x.message)||'err');gdStatus()})}
+},true);
 
 /* ---------- events ---------- */
 document.addEventListener('click',function(e){
@@ -768,6 +884,13 @@ document.addEventListener('click',function(e){
     case 'note-del':v.notes=v.notes.filter(function(x){return x.id!==id});save();render(true);break;
     case 'link-add':linkSheet();break;
     case 'link-del':v.links=v.links.filter(function(x){return x.id!==id});save();render(true);break;
+    case 'gd-connect':{var cid=(($('#gdclient')||{}).value||'').trim();
+      if(!/^[\w.-]+\.apps\.googleusercontent\.com$/.test(cid)){toast('Identifiant client invalide');break}
+      gdSet('gd-client',cid);gd.client=null;gd.tok=null;gd.cid='';closeSheet();toast('Connexion en cours…');
+      gdToken(true).then(function(){gdSet('gd-linked','1');gdSet('gd-err','');return gdSync()}).then(function(){toast('Google Drive connecté');render(true)}).catch(function(x){gdSet('gd-err',(x&&x.message)||'err');toast('Connexion impossible : '+((x&&x.message)||'erreur'))});break}
+    case 'gd-now':closeSheet();gdPush().then(function(){toast(gdGet('gd-err')?'Échec : '+gdErrMsg(gdGet('gd-err')):'Sauvegardé sur Drive')});break;
+    case 'gd-off':gdSet('gd-linked','');gd.tok=null;closeSheet();render(true);toast('Drive déconnecté. La sauvegarde reste dans ton Drive.');break;
+    case 'gd-line':if(gdGet('gd-err')||gd.needAuth)gdReauth();else gdPush().then(gdStatus);break;
     case 'backup':backupSheet();break;
     case 'backup-copy':{var ta=$('#bk');ta.select();var ok=function(){toast('Sauvegarde copiée')},ko=function(){toast('Sélectionne le texte et copie-le à la main')};
       if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(ta.value).then(ok,ko);else ko();break}
@@ -791,6 +914,7 @@ document.addEventListener('change',function(e){
 });
 
 render();
+if(gdLinked()){gdToken(false).then(gdSync).then(function(){gdSet('gd-err','');gdStatus()}).catch(function(e){gdSet('gd-err',(e&&e.message)||'err');gdStatus()})}
 })();
 </script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
